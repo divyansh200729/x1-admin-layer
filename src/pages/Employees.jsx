@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react'
 import { Users, Plus, Search, Pencil, Trash2, X, Check } from 'lucide-react'
-import axios from 'axios'
+import axios from '../lib/apiClient'
 import Topbar from '../components/Topbar'
 import { useToast } from '../context/ToastContext'
 

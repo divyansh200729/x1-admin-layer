@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback } from 'react'
-import axios from 'axios'
+import axios from '../lib/apiClient'
 
 export function useApi(url) {
   const [data, setData] = useState([])

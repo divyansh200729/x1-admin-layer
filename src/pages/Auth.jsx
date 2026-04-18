@@ -1,6 +1,6 @@
 import { useState } from 'react'
 import { useNavigate } from 'react-router-dom'
-import axios from 'axios'
+import axios from '../lib/apiClient'
 import { useToast } from '../context/ToastContext'
 import { ADMIN_EMAIL, ADMIN_PASSWORD, ROLE_ACCESS } from '../utils/roleChecker'
 

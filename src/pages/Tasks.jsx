@@ -1,6 +1,6 @@
 import { useState, useCallback } from 'react'
 import { CheckSquare, Plus, Search, Pencil, Trash2, LayoutGrid, List } from 'lucide-react'
-import axios from 'axios'
+import axios from '../lib/apiClient'
 import {
   DndContext,
   DragOverlay,

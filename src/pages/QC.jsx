@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react'
 import { ClipboardCheck, Plus, Search, Pencil, Trash2, Eye, Archive, ChevronDown, X as XIcon, Camera } from 'lucide-react'
 import InlineScanner from '../components/InlineScanner'
-import axios from 'axios'
+import axios from '../lib/apiClient'
 import Topbar from '../components/Topbar'
 import Drawer from '../components/ui/Drawer'
 import Modal from '../components/ui/Modal'

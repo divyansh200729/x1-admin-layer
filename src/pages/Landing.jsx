@@ -4,7 +4,7 @@ import {
   TrendingUp, Wrench, Package, ClipboardCheck, CheckSquare, ArrowRight,
   TrendingDown, Minus, BarChart2, ShoppingBag, Users as UsersIcon, RefreshCw, Archive
 } from 'lucide-react'
-import axios from 'axios'
+import axios from '../lib/apiClient'
 import {
   AreaChart, Area, PieChart, Pie, Cell, BarChart, Bar,
   XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer

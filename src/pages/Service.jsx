@@ -1,6 +1,6 @@
 import { useState } from 'react'
 import { Wrench, Plus, Search, Pencil, Trash2, MessageCircle } from 'lucide-react'
-import axios from 'axios'
+import axios from '../lib/apiClient'
 import Topbar from '../components/Topbar'
 import Drawer from '../components/ui/Drawer'
 import Button from '../components/ui/Button'

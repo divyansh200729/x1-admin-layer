@@ -1,7 +1,7 @@
 import { useState, useEffect, useRef, useCallback } from 'react'
 import { Html5Qrcode } from 'html5-qrcode'
 import { ScanLine, Search, Wrench, ClipboardCheck, Package, Clock, Trash2, X, CheckCircle2, XCircle, Camera, Keyboard } from 'lucide-react'
-import axios from 'axios'
+import axios from '../lib/apiClient'
 import { useNavigate } from 'react-router-dom'
 import Topbar from '../components/Topbar'
 import Badge from '../components/ui/Badge'

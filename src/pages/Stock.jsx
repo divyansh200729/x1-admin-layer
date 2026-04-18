@@ -3,7 +3,7 @@ import {
   Archive, Upload, Download, Search, X, CheckCircle2, AlertCircle,
   ChevronLeft, ChevronRight, Trash2, RefreshCw, Filter
 } from 'lucide-react'
-import axios from 'axios'
+import axios from '../lib/apiClient'
 import Topbar from '../components/Topbar'
 
 // ─── CSV Parser (handles BOM, quoted fields, embedded newlines & escaped quotes) ─
