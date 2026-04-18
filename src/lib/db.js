@@ -1,137 +1,109 @@
-const now = () => new Date().toISOString()
+import { createClient } from '@supabase/supabase-js'
 
-function getTable(name) {
-  try { return JSON.parse(localStorage.getItem(`x1_${name}`) || '[]') } catch { return [] }
-}
-function setTable(name, data) {
-  localStorage.setItem(`x1_${name}`, JSON.stringify(data))
-}
-function nextId(rows) {
-  if (!rows.length) return 1
-  return Math.max(...rows.map(r => Number(r.id) || 0)) + 1
-}
-function parseChecklist(cl) {
-  if (Array.isArray(cl)) return cl
-  try { return JSON.parse(cl || '[]') } catch { return [] }
+const supabase = createClient(
+  'https://ekuhqbmsnhzhlcftpkqp.supabase.co',
+  'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImVrdWhxYm1zbmh6aGxjZnRwa3FwIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzY0OTQ1ODAsImV4cCI6MjA5MjA3MDU4MH0.dLngGQadm0yuAoBEPc9cSXi8p6u3GfA4WDFlA2fsVe8'
+)
+
+const ts = () => new Date().toISOString()
+
+async function q(promise) {
+  const { data, error } = await promise
+  if (error) throw new Error(error.message)
+  return data
 }
 
 // ─── Orders ───────────────────────────────────────────────────
-export function getOrders() { return getTable('orders') }
-export function addOrder(data) {
-  const rows = getTable('orders')
-  const row = { ...data, id: nextId(rows), created_at: now(), updated_at: now() }
-  setTable('orders', [row, ...rows])
-  return row
+export async function getOrders() {
+  return q(supabase.from('orders').select('*').order('created_at', { ascending: false }))
 }
-export function updateOrder(id, data) {
-  const rows = getTable('orders').map(r => r.id === id ? { ...r, ...data, updated_at: now() } : r)
-  setTable('orders', rows)
-  return rows.find(r => r.id === id)
+export async function addOrder(data) {
+  return q(supabase.from('orders').insert(data).select().single())
 }
-export function deleteOrder(id) {
-  setTable('orders', getTable('orders').filter(r => r.id !== id))
+export async function updateOrder(id, data) {
+  return q(supabase.from('orders').update({ ...data, updated_at: ts() }).eq('id', id).select().single())
+}
+export async function deleteOrder(id) {
+  return q(supabase.from('orders').delete().eq('id', id))
 }
 
 // ─── Service Records ──────────────────────────────────────────
-export function getServiceRecords() { return getTable('service_records') }
-export function addServiceRecord(data) {
-  const rows = getTable('service_records')
-  const row = { ...data, id: nextId(rows), created_at: now(), updated_at: now() }
-  setTable('service_records', [row, ...rows])
-  return row
+export async function getServiceRecords() {
+  return q(supabase.from('service_records').select('*').order('created_at', { ascending: false }))
 }
-export function updateServiceRecord(id, data) {
-  const rows = getTable('service_records').map(r => r.id === id ? { ...r, ...data, updated_at: now() } : r)
-  setTable('service_records', rows)
-  return rows.find(r => r.id === id)
+export async function addServiceRecord(data) {
+  return q(supabase.from('service_records').insert(data).select().single())
 }
-export function deleteServiceRecord(id) {
-  setTable('service_records', getTable('service_records').filter(r => r.id !== id))
+export async function updateServiceRecord(id, data) {
+  return q(supabase.from('service_records').update({ ...data, updated_at: ts() }).eq('id', id).select().single())
+}
+export async function deleteServiceRecord(id) {
+  return q(supabase.from('service_records').delete().eq('id', id))
 }
 
 // ─── Sales Inquiries ──────────────────────────────────────────
-export function getSalesInquiries() { return getTable('sales_inquiries') }
-export function addSalesInquiry(data) {
-  const rows = getTable('sales_inquiries')
-  const row = { ...data, id: nextId(rows), created_at: now(), updated_at: now() }
-  setTable('sales_inquiries', [row, ...rows])
-  return row
+export async function getSalesInquiries() {
+  return q(supabase.from('sales_inquiries').select('*').order('created_at', { ascending: false }))
 }
-export function updateSalesInquiry(id, data) {
-  const rows = getTable('sales_inquiries').map(r => r.id === id ? { ...r, ...data, updated_at: now() } : r)
-  setTable('sales_inquiries', rows)
-  return rows.find(r => r.id === id)
+export async function addSalesInquiry(data) {
+  return q(supabase.from('sales_inquiries').insert(data).select().single())
 }
-export function deleteSalesInquiry(id) {
-  setTable('sales_inquiries', getTable('sales_inquiries').filter(r => r.id !== id))
+export async function updateSalesInquiry(id, data) {
+  return q(supabase.from('sales_inquiries').update({ ...data, updated_at: ts() }).eq('id', id).select().single())
+}
+export async function deleteSalesInquiry(id) {
+  return q(supabase.from('sales_inquiries').delete().eq('id', id))
 }
 
 // ─── QC Tests ─────────────────────────────────────────────────
-export function getQCTests() {
-  return getTable('qc_tests').map(r => ({ ...r, checklist: parseChecklist(r.checklist) }))
+export async function getQCTests() {
+  return q(supabase.from('qc_tests').select('*').order('created_at', { ascending: false }))
 }
-export function addQCTest(data) {
-  const rows = getTable('qc_tests')
-  const row = { ...data, checklist: JSON.stringify(data.checklist || []), id: nextId(rows), created_at: now(), updated_at: now() }
-  setTable('qc_tests', [row, ...rows])
-  return { ...row, checklist: data.checklist || [] }
+export async function addQCTest(data) {
+  return q(supabase.from('qc_tests').insert(data).select().single())
 }
-export function updateQCTest(id, data) {
-  const rows = getTable('qc_tests').map(r =>
-    r.id === id ? { ...r, ...data, checklist: JSON.stringify(data.checklist || []), updated_at: now() } : r
-  )
-  setTable('qc_tests', rows)
-  const found = rows.find(r => r.id === id)
-  return { ...found, checklist: data.checklist || [] }
+export async function updateQCTest(id, data) {
+  return q(supabase.from('qc_tests').update({ ...data, updated_at: ts() }).eq('id', id).select().single())
 }
-export function deleteQCTest(id) {
-  setTable('qc_tests', getTable('qc_tests').filter(r => r.id !== id))
+export async function deleteQCTest(id) {
+  return q(supabase.from('qc_tests').delete().eq('id', id))
 }
 
 // ─── Tasks ────────────────────────────────────────────────────
-export function getTasks() { return getTable('tasks') }
-export function addTask(data) {
-  const rows = getTable('tasks')
-  const row = { ...data, id: nextId(rows), created_at: now(), updated_at: now() }
-  setTable('tasks', [row, ...rows])
-  return row
+export async function getTasks() {
+  return q(supabase.from('tasks').select('*').order('created_at', { ascending: false }))
 }
-export function updateTask(id, data) {
-  const rows = getTable('tasks').map(r => r.id === id ? { ...r, ...data, updated_at: now() } : r)
-  setTable('tasks', rows)
-  return rows.find(r => r.id === id)
+export async function addTask(data) {
+  return q(supabase.from('tasks').insert(data).select().single())
 }
-export function deleteTask(id) {
-  setTable('tasks', getTable('tasks').filter(r => r.id !== id))
+export async function updateTask(id, data) {
+  return q(supabase.from('tasks').update({ ...data, updated_at: ts() }).eq('id', id).select().single())
+}
+export async function deleteTask(id) {
+  return q(supabase.from('tasks').delete().eq('id', id))
 }
 
 // ─── Employees ────────────────────────────────────────────────
-export function getEmployees() {
-  return getTable('employees').map(({ password, ...rest }) => rest)
+const EMP_COLS = 'id,name,email,role,department,status,created_at'
+
+export async function getEmployees() {
+  return q(supabase.from('employees').select(EMP_COLS).order('created_at', { ascending: false }))
 }
-export function addEmployee(data) {
-  const rows = getTable('employees')
-  if (rows.find(r => r.email.toLowerCase() === data.email.toLowerCase()))
-    throw new Error('Email already in use')
-  const row = { ...data, email: data.email.toLowerCase(), id: nextId(rows), created_at: now(), updated_at: now() }
-  setTable('employees', [...rows, row])
-  const { password, ...safe } = row
-  return safe
+export async function addEmployee(data) {
+  const existing = await q(supabase.from('employees').select('id').eq('email', data.email.toLowerCase()).maybeSingle())
+  if (existing) throw new Error('Email already in use')
+  return q(supabase.from('employees').insert({ ...data, email: data.email.toLowerCase() }).select(EMP_COLS).single())
 }
-export function updateEmployee(id, data) {
-  const rows = getTable('employees')
-  if (rows.find(r => r.email.toLowerCase() === data.email.toLowerCase() && r.id !== id))
-    throw new Error('Email already in use')
-  const updated = rows.map(r => r.id === id ? { ...r, ...data, email: data.email.toLowerCase(), updated_at: now() } : r)
-  setTable('employees', updated)
-  const { password, ...safe } = updated.find(r => r.id === id)
-  return safe
+export async function updateEmployee(id, data) {
+  const existing = await q(supabase.from('employees').select('id').eq('email', data.email.toLowerCase()).neq('id', id).maybeSingle())
+  if (existing) throw new Error('Email already in use')
+  return q(supabase.from('employees').update({ ...data, email: data.email.toLowerCase(), updated_at: ts() }).eq('id', id).select(EMP_COLS).single())
 }
-export function deleteEmployee(id) {
-  setTable('employees', getTable('employees').filter(r => r.id !== id))
+export async function deleteEmployee(id) {
+  return q(supabase.from('employees').delete().eq('id', id))
 }
-export function loginEmployee(email, password) {
-  const emp = getTable('employees').find(r => r.email === email.toLowerCase())
+export async function loginEmployee(email, password) {
+  const emp = await q(supabase.from('employees').select('*').eq('email', email.toLowerCase()).maybeSingle())
   if (!emp) throw new Error('No employee found with this email')
   if (emp.password !== password) throw new Error('Incorrect password')
   if (emp.status === 'Inactive') throw new Error('Account is inactive. Contact admin.')
@@ -140,37 +112,37 @@ export function loginEmployee(email, password) {
 }
 
 // ─── Stock ────────────────────────────────────────────────────
-export function getStock() { return getTable('stock_items') }
-export function importStock(items) {
-  const ts = now()
-  const rows = items.map((item, i) => ({
+export async function getStock() {
+  return q(supabase.from('stock_items').select('*').order('id', { ascending: true }))
+}
+export async function importStock(items) {
+  await q(supabase.from('stock_items').delete().gte('id', 1))
+  const now = ts()
+  const rows = items.map(item => ({
     handle: item.handle || '', title: item.title || '', vendor: item.vendor || '',
     type: item.type || '', tags: item.tags || '', sku: item.sku || '',
     qty: Number(item.qty) || 0, price: Number(item.price) || 0,
     mrp: Number(item.mrp) || 0, status: item.status || 'draft',
-    id: i + 1, created_at: ts, updated_at: ts,
+    created_at: now, updated_at: now,
   }))
-  setTable('stock_items', rows)
+  await q(supabase.from('stock_items').insert(rows))
   return rows.length
 }
-export function patchStock(id, data) {
-  const rows = getTable('stock_items')
-  const existing = rows.find(r => r.id === id)
-  if (!existing) throw new Error('Item not found')
-  const updated = rows.map(r => r.id === id ? { ...r, ...data, updated_at: now() } : r)
-  setTable('stock_items', updated)
-  return updated.find(r => r.id === id)
+export async function patchStock(id, data) {
+  return q(supabase.from('stock_items').update({ ...data, updated_at: ts() }).eq('id', id).select().single())
 }
-export function clearStock() { setTable('stock_items', []) }
+export async function clearStock() {
+  return q(supabase.from('stock_items').delete().gte('id', 1))
+}
 
 // ─── Serial Lookup ────────────────────────────────────────────
-export function serialLookup(q) {
-  const pattern = (q || '').trim().toLowerCase()
+export async function serialLookup(query) {
+  const pattern = (query || '').trim()
   if (!pattern) return { service: [], qc: [], orders: [] }
-  return {
-    service: getTable('service_records').filter(r => (r.serial_number || '').toLowerCase().includes(pattern)),
-    qc: getTable('qc_tests').map(r => ({ ...r, checklist: parseChecklist(r.checklist) }))
-      .filter(r => (r.serial_number || '').toLowerCase().includes(pattern)),
-    orders: getTable('orders').filter(r => (r.tracking_number || '').toLowerCase().includes(pattern)),
-  }
+  const [service, qc, orders] = await Promise.all([
+    q(supabase.from('service_records').select('*').ilike('serial_number', `%${pattern}%`).order('created_at', { ascending: false })),
+    q(supabase.from('qc_tests').select('*').ilike('serial_number', `%${pattern}%`).order('created_at', { ascending: false })),
+    q(supabase.from('orders').select('*').ilike('tracking_number', `%${pattern}%`).order('created_at', { ascending: false })),
+  ])
+  return { service, qc, orders }
 }
