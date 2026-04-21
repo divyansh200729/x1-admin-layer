@@ -169,7 +169,7 @@ export default function Layout({ children }) {
           <div className="flex items-center justify-around h-16 px-1">
             {[
               { path: '/home',       icon: Home,          label: 'Home',       always: true },
-              { path: '/attendance', icon: UserCheck,    label: 'Attend.',    section: 'attendance' },
+              { path: '/attendance', icon: UserCheck,    label: 'Attend.',    always: true },
               { path: '/stock',      icon: Archive,      label: 'Stock',      always: true },
               { path: '/scanner',    icon: ScanLine,     label: 'Scanner',    always: true },
               { path: '/sales',      icon: TrendingUp,   label: 'Sales',      section: 'sales' },

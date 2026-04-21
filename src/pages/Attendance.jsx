@@ -3,7 +3,7 @@ import {
   UserCheck, Plus, Search, Eye, Trash2, X, Camera,
   Upload, ChevronLeft, ChevronRight, Calendar,
   Clock, CheckCircle, XCircle, Minus, Coffee, AlertTriangle,
-  TrendingUp, Pencil
+  TrendingUp, Pencil, LogIn, LogOut, Zap
 } from 'lucide-react'
 import axios from '../lib/apiClient'
 import Topbar from '../components/Topbar'
@@ -14,20 +14,23 @@ import { getCurrentUser, isAdmin } from '../utils/roleChecker'
 const STATUS_OPTIONS = ['Present', 'Absent', 'Half Day', 'Weekly Off']
 
 const STATUS_CONFIG = {
-  'Present':    { color: 'bg-green-100 text-green-700',   dot: 'bg-green-500',   icon: CheckCircle },
-  'Absent':     { color: 'bg-red-100 text-red-700',       dot: 'bg-red-500',     icon: XCircle },
-  'Half Day':   { color: 'bg-orange-100 text-orange-700', dot: 'bg-orange-400',  icon: Minus },
-  'Weekly Off': { color: 'bg-blue-100 text-blue-700',     dot: 'bg-blue-400',    icon: Coffee },
+  'Present':    { color: 'bg-green-100 text-green-700',   icon: CheckCircle },
+  'Absent':     { color: 'bg-red-100 text-red-700',       icon: XCircle },
+  'Half Day':   { color: 'bg-orange-100 text-orange-700', icon: Minus },
+  'Weekly Off': { color: 'bg-blue-100 text-blue-700',     icon: Coffee },
 }
 
 const EMPTY_FORM = {
+  mark_type: 'Check In',
   employee_name: '',
   date: new Date().toISOString().slice(0, 10),
   status: 'Present',
-  check_in_time: '09:00',
-  check_out_time: '18:00',
+  check_in_time: '',
+  check_out_time: '',
   fine: '',
   overtime: '',
+  photo_in: '',
+  photo_out: '',
   photo_data: '',
   notes: '',
 }
@@ -41,8 +44,7 @@ function compressImage(file, maxWidth = 800, quality = 0.72) {
         const canvas = document.createElement('canvas')
         let { width, height } = img
         if (width > maxWidth) { height = Math.round((height * maxWidth) / width); width = maxWidth }
-        canvas.width = width
-        canvas.height = height
+        canvas.width = width; canvas.height = height
         canvas.getContext('2d').drawImage(img, 0, 0, width, height)
         resolve(canvas.toDataURL('image/jpeg', quality))
       }
@@ -55,7 +57,7 @@ function compressImage(file, maxWidth = 800, quality = 0.72) {
 function StatCard({ label, value, bgColor, textColor, icon: Icon }) {
   return (
     <div className={`rounded-2xl p-4 ${bgColor} flex items-center gap-3`}>
-      <div className={`w-10 h-10 rounded-xl flex items-center justify-center bg-white/50 flex-shrink-0`}>
+      <div className="w-10 h-10 rounded-xl flex items-center justify-center bg-white/50 flex-shrink-0">
         <Icon size={18} className={textColor} />
       </div>
       <div>
@@ -68,18 +70,14 @@ function StatCard({ label, value, bgColor, textColor, icon: Icon }) {
 
 function StatusBadge({ status }) {
   const cfg = STATUS_CONFIG[status] || { color: 'bg-gray-100 text-gray-600' }
-  return (
-    <span className={`inline-flex items-center px-2.5 py-1 rounded-full text-xs font-semibold ${cfg.color}`}>
-      {status}
-    </span>
-  )
+  return <span className={`inline-flex items-center px-2.5 py-1 rounded-full text-xs font-semibold ${cfg.color}`}>{status}</span>
 }
 
 function FormField({ label, required, children }) {
   return (
     <div>
       <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wide mb-1.5">
-        {label} {required && <span className="text-red-500">*</span>}
+        {label}{required && <span className="text-red-500"> *</span>}
       </label>
       {children}
     </div>
@@ -102,15 +100,16 @@ export default function Attendance() {
   const [editId, setEditId] = useState(null)
   const [form, setForm] = useState({ ...EMPTY_FORM })
   const [saving, setSaving] = useState(false)
+  const [generatingAbsent, setGeneratingAbsent] = useState(false)
   const [confirmDelete, setConfirmDelete] = useState(null)
   const [photoModal, setPhotoModal] = useState(null)
   const [showCamera, setShowCamera] = useState(false)
   const [search, setSearch] = useState('')
   const [filterStatus, setFilterStatus] = useState('')
 
-  const now = new Date()
-  const [filterMonth, setFilterMonth] = useState(now.getMonth() + 1)
-  const [filterYear, setFilterYear] = useState(now.getFullYear())
+  const nowDate = new Date()
+  const [filterMonth, setFilterMonth] = useState(nowDate.getMonth() + 1)
+  const [filterYear, setFilterYear] = useState(nowDate.getFullYear())
 
   const fetchRecords = async () => {
     try {
@@ -125,26 +124,27 @@ export default function Attendance() {
 
   useEffect(() => {
     fetchRecords()
-    if (admin) {
-      getEmployees().then(setEmployees).catch(() => {})
-    }
+    getEmployees().then(setEmployees).catch(() => {})
   }, [])
 
   const openForm = (record = null) => {
+    const now = new Date()
+    const currentTime = now.toTimeString().slice(0, 5)
     if (record) {
       setForm({
         ...EMPTY_FORM,
         ...record,
+        mark_type: 'Check In',
         fine: record.fine ?? '',
         overtime: record.overtime ?? '',
-        photo_data: record.photo_data || '',
+        photo_in: record.photo_in || record.photo_data || '',
+        photo_out: record.photo_out || '',
       })
       setEditId(record.id)
     } else {
-      const now = new Date()
-      const currentTime = now.toTimeString().slice(0, 5)
       setForm({
         ...EMPTY_FORM,
+        mark_type: 'Check In',
         employee_name: admin ? '' : (currentUser?.name || ''),
         date: now.toISOString().slice(0, 10),
         check_in_time: currentTime,
@@ -155,13 +155,20 @@ export default function Attendance() {
     setShowForm(true)
   }
 
-  const closeForm = () => {
-    setShowForm(false)
-    setEditId(null)
-    stopCamera()
+  const closeForm = () => { setShowForm(false); setEditId(null); stopCamera() }
+
+  // When mark_type changes, refresh current time
+  const setMarkType = (type) => {
+    const now = new Date()
+    const currentTime = now.toTimeString().slice(0, 5)
+    setForm(f => ({
+      ...f,
+      mark_type: type,
+      check_in_time: type === 'Check In' ? currentTime : f.check_in_time,
+      check_out_time: type === 'Check Out' ? currentTime : f.check_out_time,
+    }))
   }
 
-  // Month-filtered records for dashboard/summary
   const monthRecords = records.filter(r => {
     if (!r.date) return false
     const d = new Date(r.date)
@@ -186,7 +193,6 @@ export default function Attendance() {
     return matchMonth && matchSearch && matchStatus
   })
 
-  // Summary by employee
   const summaryByEmployee = {}
   monthRecords.forEach(r => {
     if (!summaryByEmployee[r.employee_name]) {
@@ -201,41 +207,32 @@ export default function Attendance() {
     s.overtime += Number(r.overtime) || 0
   })
 
-  // Photo via file input
+  // Photo handling — tracks which slot (in/out) based on mark_type
+  const currentPhotoField = form.mark_type === 'Check In' ? 'photo_in' : 'photo_out'
+
   const handleFileSelect = async (e) => {
     const file = e.target.files?.[0]
     if (!file) return
     try {
       const compressed = await compressImage(file)
-      setForm(f => ({ ...f, photo_data: compressed }))
-    } catch {
-      toast('Failed to process image', 'error')
-    }
+      setForm(f => ({ ...f, [currentPhotoField]: compressed, photo_data: compressed }))
+    } catch { toast('Failed to process image', 'error') }
     e.target.value = ''
   }
 
-  // Camera
   const startCamera = async () => {
     try {
       const stream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: 'user' }, audio: false })
       cameraStreamRef.current = stream
       setShowCamera(true)
       setTimeout(() => {
-        if (cameraVideoRef.current) {
-          cameraVideoRef.current.srcObject = stream
-          cameraVideoRef.current.play()
-        }
+        if (cameraVideoRef.current) { cameraVideoRef.current.srcObject = stream; cameraVideoRef.current.play() }
       }, 100)
-    } catch {
-      toast('Camera unavailable — use Upload instead', 'info')
-    }
+    } catch { toast('Camera unavailable — use Upload instead', 'info') }
   }
 
   const stopCamera = () => {
-    if (cameraStreamRef.current) {
-      cameraStreamRef.current.getTracks().forEach(t => t.stop())
-      cameraStreamRef.current = null
-    }
+    if (cameraStreamRef.current) { cameraStreamRef.current.getTracks().forEach(t => t.stop()); cameraStreamRef.current = null }
     setShowCamera(false)
   }
 
@@ -243,11 +240,10 @@ export default function Attendance() {
     const video = cameraVideoRef.current
     if (!video) return
     const canvas = document.createElement('canvas')
-    canvas.width = video.videoWidth || 640
-    canvas.height = video.videoHeight || 480
+    canvas.width = video.videoWidth || 640; canvas.height = video.videoHeight || 480
     canvas.getContext('2d').drawImage(video, 0, 0)
     const dataUrl = canvas.toDataURL('image/jpeg', 0.8)
-    setForm(f => ({ ...f, photo_data: dataUrl }))
+    setForm(f => ({ ...f, [currentPhotoField]: dataUrl, photo_data: dataUrl }))
     stopCamera()
   }
 
@@ -256,48 +252,77 @@ export default function Attendance() {
     if (!form.date) { toast('Date is required', 'error'); return }
     setSaving(true)
     try {
+      // For Check Out: find existing record for same employee+date and update it
+      if (!editId && form.mark_type === 'Check Out') {
+        const existing = records.find(r => r.employee_name === form.employee_name && r.date === form.date)
+        if (existing) {
+          await axios.put(`/api/attendance/${existing.id}`, {
+            ...existing,
+            check_out_time: form.check_out_time,
+            photo_out: form.photo_out,
+            photo_data: existing.photo_data || form.photo_out,
+          })
+          toast('Check Out recorded')
+          closeForm(); fetchRecords(); return
+        }
+      }
       const payload = {
         ...form,
         fine: form.fine !== '' ? Number(form.fine) : 0,
         overtime: form.overtime !== '' ? Number(form.overtime) : 0,
+        photo_data: form.photo_in || form.photo_data || '',
       }
       if (editId) {
         await axios.put(`/api/attendance/${editId}`, payload)
         toast('Attendance updated')
       } else {
         await axios.post('/api/attendance', payload)
-        toast('Attendance marked successfully')
+        toast(form.mark_type === 'Check In' ? 'Check In recorded' : 'Attendance marked')
       }
-      closeForm()
-      fetchRecords()
+      closeForm(); fetchRecords()
     } catch (e) {
       toast(e.response?.data?.error || 'Failed to save', 'error')
-    } finally {
-      setSaving(false)
-    }
+    } finally { setSaving(false) }
   }
 
   const handleDelete = async (id) => {
     try {
       await axios.delete(`/api/attendance/${id}`)
-      toast('Record deleted')
-      setConfirmDelete(null)
+      toast('Record deleted'); setConfirmDelete(null); fetchRecords()
+    } catch { toast('Failed to delete', 'error') }
+  }
+
+  // Auto-generate Absent for employees who didn't mark attendance
+  const generateAbsent = async () => {
+    if (!employees.length) { toast('No employees found', 'error'); return }
+    setGeneratingAbsent(true)
+    try {
+      const today = new Date(); today.setHours(0, 0, 0, 0)
+      const monthStart = new Date(filterYear, filterMonth - 1, 1)
+      const days = []
+      let d = new Date(monthStart)
+      while (d < today) {
+        if (d.getDay() !== 0) days.push(d.toISOString().slice(0, 10)) // skip Sunday
+        d.setDate(d.getDate() + 1)
+      }
+      const toCreate = []
+      for (const emp of employees) {
+        for (const day of days) {
+          const exists = records.find(r => r.employee_name === emp.name && r.date === day)
+          if (!exists) toCreate.push({ employee_name: emp.name, date: day, status: 'Absent', check_in_time: '', check_out_time: '', fine: 0, overtime: 0, photo_in: '', photo_out: '', photo_data: '', notes: 'Auto-generated' })
+        }
+      }
+      if (toCreate.length === 0) { toast('All employees already have records for this period', 'info'); return }
+      await Promise.all(toCreate.map(r => axios.post('/api/attendance', r)))
+      toast(`Generated ${toCreate.length} absent records`)
       fetchRecords()
-    } catch {
-      toast('Failed to delete', 'error')
-    }
+    } catch { toast('Failed to generate absent records', 'error') }
+    finally { setGeneratingAbsent(false) }
   }
 
-  const prevMonth = () => {
-    if (filterMonth === 1) { setFilterMonth(12); setFilterYear(y => y - 1) }
-    else setFilterMonth(m => m - 1)
-  }
-  const nextMonth = () => {
-    if (filterMonth === 12) { setFilterMonth(1); setFilterYear(y => y + 1) }
-    else setFilterMonth(m => m + 1)
-  }
+  const prevMonth = () => { if (filterMonth === 1) { setFilterMonth(12); setFilterYear(y => y - 1) } else setFilterMonth(m => m - 1) }
+  const nextMonth = () => { if (filterMonth === 12) { setFilterMonth(1); setFilterYear(y => y + 1) } else setFilterMonth(m => m + 1) }
   const monthLabel = new Date(filterYear, filterMonth - 1).toLocaleString('default', { month: 'long', year: 'numeric' })
-
   const inputCls = 'w-full px-3 py-2.5 rounded-xl border border-[#E8ECF0] text-sm font-medium focus:outline-none focus:ring-2 focus:ring-violet-500/20 focus:border-violet-500 bg-white transition-all'
 
   return (
@@ -318,34 +343,19 @@ export default function Attendance() {
 
         {/* Month navigator */}
         <div className="bg-white/10 backdrop-blur-sm rounded-2xl p-1 flex items-center">
-          <button onClick={prevMonth} className="p-2.5 rounded-xl hover:bg-white/20 text-white transition-all">
-            <ChevronLeft size={18} />
-          </button>
+          <button onClick={prevMonth} className="p-2.5 rounded-xl hover:bg-white/20 text-white transition-all"><ChevronLeft size={18} /></button>
           <div className="flex-1 flex items-center justify-center gap-2">
             <Calendar size={15} className="text-violet-200" />
             <span className="font-heading font-bold text-white text-sm">{monthLabel}</span>
           </div>
-          <button onClick={nextMonth} className="p-2.5 rounded-xl hover:bg-white/20 text-white transition-all">
-            <ChevronRight size={18} />
-          </button>
+          <button onClick={nextMonth} className="p-2.5 rounded-xl hover:bg-white/20 text-white transition-all"><ChevronRight size={18} /></button>
         </div>
 
         {/* Tab bar */}
         <div className="flex gap-1 bg-white/10 rounded-2xl p-1">
-          {[
-            { id: 'dashboard', label: 'Dashboard' },
-            { id: 'records',   label: 'Records' },
-            { id: 'summary',   label: 'Summary' },
-          ].map(tab => (
-            <button
-              key={tab.id}
-              onClick={() => setActiveTab(tab.id)}
-              className={`flex-1 py-2.5 rounded-xl text-sm font-semibold transition-all ${
-                activeTab === tab.id
-                  ? 'bg-white text-violet-700 shadow-sm'
-                  : 'text-white/70 hover:text-white hover:bg-white/10'
-              }`}
-            >
+          {[{ id: 'dashboard', label: 'Dashboard' }, { id: 'records', label: 'Records' }, { id: 'summary', label: 'Summary' }].map(tab => (
+            <button key={tab.id} onClick={() => setActiveTab(tab.id)}
+              className={`flex-1 py-2.5 rounded-xl text-sm font-semibold transition-all ${activeTab === tab.id ? 'bg-white text-violet-700 shadow-sm' : 'text-white/70 hover:text-white hover:bg-white/10'}`}>
               {tab.label}
             </button>
           ))}
@@ -355,13 +365,25 @@ export default function Attendance() {
         {activeTab === 'dashboard' && (
           <div className="space-y-4">
             <div className="grid grid-cols-2 gap-3">
-              <StatCard label="Present"      value={stats.present}               bgColor="bg-green-50"  textColor="text-green-700"  icon={CheckCircle} />
-              <StatCard label="Absent"       value={stats.absent}                bgColor="bg-red-50"    textColor="text-red-600"    icon={XCircle} />
-              <StatCard label="Half Day"     value={stats.halfDay}               bgColor="bg-orange-50" textColor="text-orange-600" icon={Minus} />
-              <StatCard label="Weekly Off"   value={stats.weeklyOff}             bgColor="bg-blue-50"   textColor="text-blue-600"   icon={Coffee} />
-              <StatCard label="Total Fine"   value={`₹${stats.fine}`}           bgColor="bg-rose-50"   textColor="text-rose-600"   icon={AlertTriangle} />
-              <StatCard label="Overtime hrs" value={stats.overtime.toFixed(1)}   bgColor="bg-violet-50" textColor="text-violet-700" icon={TrendingUp} />
+              <StatCard label="Present"      value={stats.present}             bgColor="bg-green-50"  textColor="text-green-700"  icon={CheckCircle} />
+              <StatCard label="Absent"       value={stats.absent}              bgColor="bg-red-50"    textColor="text-red-600"    icon={XCircle} />
+              <StatCard label="Half Day"     value={stats.halfDay}             bgColor="bg-orange-50" textColor="text-orange-600" icon={Minus} />
+              <StatCard label="Weekly Off"   value={stats.weeklyOff}           bgColor="bg-blue-50"   textColor="text-blue-600"   icon={Coffee} />
+              <StatCard label="Total Fine"   value={`₹${stats.fine}`}         bgColor="bg-rose-50"   textColor="text-rose-600"   icon={AlertTriangle} />
+              <StatCard label="Overtime hrs" value={stats.overtime.toFixed(1)} bgColor="bg-violet-50" textColor="text-violet-700" icon={TrendingUp} />
             </div>
+
+            {/* Auto absent button — admin only */}
+            {admin && (
+              <button
+                onClick={generatingAbsent ? undefined : generateAbsent}
+                disabled={generatingAbsent}
+                className="w-full py-3 rounded-2xl border-2 border-dashed border-white/30 text-white text-sm font-semibold flex items-center justify-center gap-2 hover:bg-white/10 transition-all disabled:opacity-50"
+              >
+                <Zap size={15} />
+                {generatingAbsent ? 'Generating...' : 'Auto-Generate Absent for Unmarked Days'}
+              </button>
+            )}
 
             <div className="bg-white rounded-2xl shadow-sm border border-[#EDE9FE] overflow-hidden">
               <div className="px-4 py-3 border-b border-gray-50 flex items-center justify-between">
@@ -369,9 +391,7 @@ export default function Attendance() {
                 <span className="text-xs text-gray-400">{monthRecords.length} this month</span>
               </div>
               {loading ? (
-                <div className="p-4 space-y-3">
-                  {[1,2,3].map(i => <div key={i} className="h-14 bg-gray-100 rounded-xl animate-pulse" />)}
-                </div>
+                <div className="p-4 space-y-3">{[1,2,3].map(i => <div key={i} className="h-14 bg-gray-100 rounded-xl animate-pulse" />)}</div>
               ) : monthRecords.length === 0 ? (
                 <div className="py-14 text-center text-gray-400 text-sm">No records this month</div>
               ) : (
@@ -379,27 +399,23 @@ export default function Attendance() {
                   {monthRecords.slice(0, 12).map(r => (
                     <div key={r.id} className="px-4 py-3 flex items-center gap-3 hover:bg-gray-50/60 transition-all">
                       <div className="w-10 h-10 rounded-xl bg-violet-100 flex-shrink-0 overflow-hidden">
-                        {r.photo_data
-                          ? <img src={r.photo_data} alt="" className="w-full h-full object-cover" />
-                          : <div className="w-full h-full flex items-center justify-center">
-                              <span className="text-violet-600 font-bold text-sm">{r.employee_name?.[0]?.toUpperCase()}</span>
-                            </div>
+                        {(r.photo_in || r.photo_data)
+                          ? <img src={r.photo_in || r.photo_data} alt="" className="w-full h-full object-cover" />
+                          : <div className="w-full h-full flex items-center justify-center"><span className="text-violet-600 font-bold text-sm">{r.employee_name?.[0]?.toUpperCase()}</span></div>
                         }
                       </div>
                       <div className="flex-1 min-w-0">
                         <p className="text-sm font-semibold text-gray-800 truncate">{r.employee_name}</p>
                         <p className="text-xs text-gray-400 mt-0.5">
                           {new Date(r.date + 'T12:00:00').toLocaleDateString('en-IN', { weekday: 'short', day: 'numeric', month: 'short' })}
-                          {r.check_in_time ? ` · ${r.check_in_time}` : ''}
+                          {r.check_in_time ? ` · In: ${r.check_in_time}` : ''}
+                          {r.check_out_time ? ` · Out: ${r.check_out_time}` : ''}
                         </p>
                       </div>
                       <div className="flex items-center gap-2">
                         <StatusBadge status={r.status} />
-                        {r.photo_data && (
-                          <button
-                            onClick={() => setPhotoModal(r.photo_data)}
-                            className="p-1.5 rounded-lg hover:bg-violet-100 text-violet-400 hover:text-violet-600 transition-all"
-                          >
+                        {(r.photo_in || r.photo_data) && (
+                          <button onClick={() => setPhotoModal(r.photo_in || r.photo_data)} className="p-1.5 rounded-lg hover:bg-violet-100 text-violet-400 hover:text-violet-600 transition-all">
                             <Eye size={14} />
                           </button>
                         )}
@@ -418,27 +434,18 @@ export default function Attendance() {
             <div className="flex gap-2">
               <div className="flex-1 relative">
                 <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" />
-                <input
-                  placeholder="Search employee..."
-                  value={search}
-                  onChange={e => setSearch(e.target.value)}
-                  className="w-full pl-9 pr-3 py-2.5 rounded-xl border border-white/20 bg-white/10 text-white placeholder-white/40 text-sm focus:outline-none focus:ring-2 focus:ring-white/30"
-                />
+                <input placeholder="Search employee..." value={search} onChange={e => setSearch(e.target.value)}
+                  className="w-full pl-9 pr-3 py-2.5 rounded-xl border border-white/20 bg-white/10 text-white placeholder-white/40 text-sm focus:outline-none focus:ring-2 focus:ring-white/30" />
               </div>
-              <select
-                value={filterStatus}
-                onChange={e => setFilterStatus(e.target.value)}
-                className="px-3 py-2.5 rounded-xl border border-white/20 bg-white/10 text-white text-sm focus:outline-none focus:ring-2 focus:ring-white/30"
-              >
+              <select value={filterStatus} onChange={e => setFilterStatus(e.target.value)}
+                className="px-3 py-2.5 rounded-xl border border-white/20 bg-white/10 text-white text-sm focus:outline-none focus:ring-2 focus:ring-white/30">
                 <option value="" className="text-gray-800 bg-white">All Status</option>
                 {STATUS_OPTIONS.map(s => <option key={s} value={s} className="text-gray-800 bg-white">{s}</option>)}
               </select>
             </div>
 
             {loading ? (
-              <div className="space-y-3">
-                {[1,2,3,4].map(i => <div key={i} className="h-20 bg-white/10 rounded-2xl animate-pulse" />)}
-              </div>
+              <div className="space-y-3">{[1,2,3,4].map(i => <div key={i} className="h-20 bg-white/10 rounded-2xl animate-pulse" />)}</div>
             ) : filteredRecords.length === 0 ? (
               <div className="bg-white rounded-2xl p-14 text-center text-gray-400 shadow-sm">No records found</div>
             ) : (
@@ -446,17 +453,30 @@ export default function Attendance() {
                 {filteredRecords.map(r => (
                   <div key={r.id} className="bg-white rounded-2xl p-4 shadow-sm border border-[#EDE9FE]">
                     <div className="flex items-start gap-3">
-                      <div
-                        className="w-14 h-14 rounded-xl bg-violet-50 flex-shrink-0 overflow-hidden cursor-pointer"
-                        onClick={() => r.photo_data && setPhotoModal(r.photo_data)}
-                      >
-                        {r.photo_data
-                          ? <img src={r.photo_data} alt="" className="w-full h-full object-cover" />
-                          : <div className="w-full h-full flex items-center justify-center">
-                              <span className="text-violet-400 font-bold text-xl">{r.employee_name?.[0]?.toUpperCase()}</span>
-                            </div>
-                        }
+                      {/* In photo + Out photo side by side */}
+                      <div className="flex gap-1.5 flex-shrink-0">
+                        <div className="flex flex-col items-center gap-0.5">
+                          <div className="w-12 h-12 rounded-xl bg-green-50 overflow-hidden cursor-pointer border border-green-100"
+                            onClick={() => (r.photo_in || r.photo_data) && setPhotoModal(r.photo_in || r.photo_data)}>
+                            {(r.photo_in || r.photo_data)
+                              ? <img src={r.photo_in || r.photo_data} alt="" className="w-full h-full object-cover" />
+                              : <div className="w-full h-full flex items-center justify-center"><LogIn size={14} className="text-green-400" /></div>
+                            }
+                          </div>
+                          <span className="text-[9px] text-green-500 font-bold">IN</span>
+                        </div>
+                        <div className="flex flex-col items-center gap-0.5">
+                          <div className="w-12 h-12 rounded-xl bg-red-50 overflow-hidden cursor-pointer border border-red-100"
+                            onClick={() => r.photo_out && setPhotoModal(r.photo_out)}>
+                            {r.photo_out
+                              ? <img src={r.photo_out} alt="" className="w-full h-full object-cover" />
+                              : <div className="w-full h-full flex items-center justify-center"><LogOut size={14} className="text-red-300" /></div>
+                            }
+                          </div>
+                          <span className="text-[9px] text-red-400 font-bold">OUT</span>
+                        </div>
                       </div>
+
                       <div className="flex-1 min-w-0">
                         <div className="flex items-start justify-between gap-2">
                           <div className="min-w-0">
@@ -468,47 +488,36 @@ export default function Attendance() {
                           <StatusBadge status={r.status} />
                         </div>
                         <div className="flex items-center gap-3 mt-2 flex-wrap">
-                          {r.check_in_time && (
-                            <span className="flex items-center gap-1 text-xs text-gray-500">
-                              <Clock size={11} className="text-green-500" /> In: {r.check_in_time}
-                            </span>
-                          )}
-                          {r.check_out_time && (
-                            <span className="flex items-center gap-1 text-xs text-gray-500">
-                              <Clock size={11} className="text-red-400" /> Out: {r.check_out_time}
-                            </span>
-                          )}
-                          {r.fine > 0 && (
-                            <span className="text-xs text-red-500 font-semibold">Fine: ₹{r.fine}</span>
-                          )}
-                          {r.overtime > 0 && (
-                            <span className="text-xs text-green-600 font-semibold">OT: {r.overtime}h</span>
-                          )}
+                          {r.check_in_time && <span className="flex items-center gap-1 text-xs text-gray-500"><Clock size={11} className="text-green-500" /> In: {r.check_in_time}</span>}
+                          {r.check_out_time && <span className="flex items-center gap-1 text-xs text-gray-500"><Clock size={11} className="text-red-400" /> Out: {r.check_out_time}</span>}
+                          {r.fine > 0 && <span className="text-xs text-red-500 font-semibold">Fine: ₹{r.fine}</span>}
+                          {r.overtime > 0 && <span className="text-xs text-green-600 font-semibold">OT: {r.overtime}h</span>}
                         </div>
-                        {r.notes && <p className="text-xs text-gray-400 mt-1 italic truncate">{r.notes}</p>}
+                        {r.notes && r.notes !== 'Auto-generated' && <p className="text-xs text-gray-400 mt-1 italic truncate">{r.notes}</p>}
                       </div>
                     </div>
+
                     <div className="flex items-center gap-2 mt-3 pt-3 border-t border-gray-50">
-                      {r.photo_data && (
-                        <button
-                          onClick={() => setPhotoModal(r.photo_data)}
-                          className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-violet-50 text-violet-600 text-xs font-semibold hover:bg-violet-100 transition-all"
-                        >
-                          <Eye size={12} /> View Photo
+                      {(r.photo_in || r.photo_data) && (
+                        <button onClick={() => setPhotoModal(r.photo_in || r.photo_data)}
+                          className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-green-50 text-green-600 text-xs font-semibold hover:bg-green-100 transition-all">
+                          <Eye size={12} /> In Photo
+                        </button>
+                      )}
+                      {r.photo_out && (
+                        <button onClick={() => setPhotoModal(r.photo_out)}
+                          className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-red-50 text-red-500 text-xs font-semibold hover:bg-red-100 transition-all">
+                          <Eye size={12} /> Out Photo
                         </button>
                       )}
                       {admin && (
                         <>
-                          <button
-                            onClick={() => openForm(r)}
-                            className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-blue-50 text-blue-600 text-xs font-semibold hover:bg-blue-100 transition-all"
-                          >
+                          <button onClick={() => openForm(r)}
+                            className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-blue-50 text-blue-600 text-xs font-semibold hover:bg-blue-100 transition-all">
                             <Pencil size={12} /> Edit
                           </button>
-                          <button
-                            onClick={() => setConfirmDelete(r.id)}
-                            className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-red-50 text-red-500 text-xs font-semibold hover:bg-red-100 transition-all ml-auto"
-                          >
+                          <button onClick={() => setConfirmDelete(r.id)}
+                            className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-red-50 text-red-500 text-xs font-semibold hover:bg-red-100 transition-all ml-auto">
                             <Trash2 size={12} /> Delete
                           </button>
                         </>
@@ -553,12 +562,8 @@ export default function Attendance() {
                           <td className="px-3 py-3 text-center font-bold text-red-500">{s.absent}</td>
                           <td className="px-3 py-3 text-center font-bold text-orange-500">{s.halfDay}</td>
                           <td className="px-3 py-3 text-center font-bold text-blue-500">{s.weeklyOff}</td>
-                          <td className="px-3 py-3 text-center font-medium text-rose-500">
-                            {s.fine > 0 ? `₹${s.fine}` : '—'}
-                          </td>
-                          <td className="px-3 py-3 text-center font-medium text-violet-600">
-                            {s.overtime > 0 ? s.overtime.toFixed(1) : '—'}
-                          </td>
+                          <td className="px-3 py-3 text-center font-medium text-rose-500">{s.fine > 0 ? `₹${s.fine}` : '—'}</td>
+                          <td className="px-3 py-3 text-center font-medium text-violet-600">{s.overtime > 0 ? s.overtime.toFixed(1) : '—'}</td>
                         </tr>
                       ))}
                     </tbody>
@@ -586,218 +591,149 @@ export default function Attendance() {
         <div className="fixed inset-0 z-50 flex">
           <div className="absolute inset-0 bg-black/50 backdrop-blur-sm" onClick={closeForm} />
           <div className="relative ml-auto w-full max-w-md bg-white h-full shadow-2xl flex flex-col overflow-hidden">
-            <div
-              className="px-5 py-4 border-b border-white/10 flex items-center justify-between flex-shrink-0"
-              style={{ background: 'linear-gradient(135deg, #2D1B69, #4C1D95)' }}
-            >
-              <h2 className="font-heading font-bold text-white">
-                {editId ? 'Edit Attendance' : 'Mark Attendance'}
-              </h2>
-              <button onClick={closeForm} className="p-1.5 rounded-lg text-white/60 hover:text-white hover:bg-white/10 transition-all">
-                <X size={18} />
-              </button>
+            <div className="px-5 py-4 border-b border-white/10 flex items-center justify-between flex-shrink-0"
+              style={{ background: 'linear-gradient(135deg, #2D1B69, #4C1D95)' }}>
+              <h2 className="font-heading font-bold text-white">{editId ? 'Edit Attendance' : 'Mark Attendance'}</h2>
+              <button onClick={closeForm} className="p-1.5 rounded-lg text-white/60 hover:text-white hover:bg-white/10 transition-all"><X size={18} /></button>
             </div>
 
             <div className="flex-1 overflow-y-auto p-5 space-y-4">
+
+              {/* ── Check In / Check Out toggle ── */}
+              {!editId && (
+                <div className="flex gap-2 p-1 bg-gray-100 rounded-2xl">
+                  <button type="button" onClick={() => setMarkType('Check In')}
+                    className={`flex-1 py-2.5 rounded-xl text-sm font-bold flex items-center justify-center gap-2 transition-all ${form.mark_type === 'Check In' ? 'bg-green-500 text-white shadow-sm' : 'text-gray-500 hover:text-gray-700'}`}>
+                    <LogIn size={15} /> Check In
+                  </button>
+                  <button type="button" onClick={() => setMarkType('Check Out')}
+                    className={`flex-1 py-2.5 rounded-xl text-sm font-bold flex items-center justify-center gap-2 transition-all ${form.mark_type === 'Check Out' ? 'bg-red-500 text-white shadow-sm' : 'text-gray-500 hover:text-gray-700'}`}>
+                    <LogOut size={15} /> Check Out
+                  </button>
+                </div>
+              )}
+
               {/* Employee */}
               <FormField label="Employee Name" required>
                 {admin && employees.length > 0 ? (
-                  <select
-                    value={form.employee_name}
-                    onChange={e => setForm(f => ({ ...f, employee_name: e.target.value }))}
-                    className={inputCls}
-                  >
+                  <select value={form.employee_name} onChange={e => setForm(f => ({ ...f, employee_name: e.target.value }))} className={inputCls}>
                     <option value="">Select Employee</option>
                     {employees.map(e => <option key={e.id} value={e.name}>{e.name}</option>)}
                   </select>
                 ) : (
-                  <input
-                    type="text"
-                    value={form.employee_name}
-                    onChange={e => setForm(f => ({ ...f, employee_name: e.target.value }))}
-                    readOnly={!admin && !!currentUser?.name}
-                    placeholder="Employee name"
-                    className={inputCls}
-                  />
+                  <input type="text" value={form.employee_name} onChange={e => setForm(f => ({ ...f, employee_name: e.target.value }))}
+                    readOnly={!admin && !!currentUser?.name} placeholder="Employee name" className={inputCls} />
                 )}
               </FormField>
 
               {/* Date */}
               <FormField label="Date" required>
-                <input
-                  type="date"
-                  value={form.date}
-                  onChange={e => setForm(f => ({ ...f, date: e.target.value }))}
-                  className={inputCls}
-                />
+                <input type="date" value={form.date} onChange={e => setForm(f => ({ ...f, date: e.target.value }))} className={inputCls} />
               </FormField>
 
-              {/* Status buttons */}
-              <FormField label="Status" required>
-                <div className="grid grid-cols-2 gap-2">
-                  {STATUS_OPTIONS.map(s => {
-                    const cfg = STATUS_CONFIG[s]
-                    const active = form.status === s
-                    return (
-                      <button
-                        key={s}
-                        type="button"
-                        onClick={() => setForm(f => ({ ...f, status: s }))}
-                        className={`py-2.5 rounded-xl text-sm font-semibold border-2 transition-all ${
-                          active
-                            ? `${cfg.color} border-current shadow-sm`
-                            : 'bg-gray-50 text-gray-500 border-transparent hover:border-gray-200'
-                        }`}
-                      >
-                        {s}
-                      </button>
-                    )
-                  })}
+              {/* Status — only for Check In */}
+              {(editId || form.mark_type === 'Check In') && (
+                <FormField label="Status" required>
+                  <div className="grid grid-cols-2 gap-2">
+                    {STATUS_OPTIONS.map(s => {
+                      const cfg = STATUS_CONFIG[s]
+                      const active = form.status === s
+                      return (
+                        <button key={s} type="button" onClick={() => setForm(f => ({ ...f, status: s }))}
+                          className={`py-2.5 rounded-xl text-sm font-semibold border-2 transition-all ${active ? `${cfg.color} border-current shadow-sm` : 'bg-gray-50 text-gray-500 border-transparent hover:border-gray-200'}`}>
+                          {s}
+                        </button>
+                      )
+                    })}
+                  </div>
+                </FormField>
+              )}
+
+              {/* Time — auto-fetched, show relevant field */}
+              {(form.status === 'Present' || form.status === 'Half Day' || editId) && (
+                <div className={editId ? 'grid grid-cols-2 gap-3' : ''}>
+                  {(editId || form.mark_type === 'Check In') && (
+                    <FormField label={`Check In Time${form.mark_type === 'Check In' && !editId ? ' (Auto)' : ''}`}>
+                      <div className="relative">
+                        <Clock size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-green-500" />
+                        <input type="time" value={form.check_in_time} onChange={e => setForm(f => ({ ...f, check_in_time: e.target.value }))}
+                          className={`${inputCls} pl-9`} />
+                      </div>
+                    </FormField>
+                  )}
+                  {(editId || form.mark_type === 'Check Out') && (
+                    <FormField label={`Check Out Time${form.mark_type === 'Check Out' && !editId ? ' (Auto)' : ''}`}>
+                      <div className="relative">
+                        <Clock size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-red-400" />
+                        <input type="time" value={form.check_out_time} onChange={e => setForm(f => ({ ...f, check_out_time: e.target.value }))}
+                          className={`${inputCls} pl-9`} />
+                      </div>
+                    </FormField>
+                  )}
                 </div>
-              </FormField>
+              )}
 
-              {/* Times — only for Present / Half Day */}
-              {(form.status === 'Present' || form.status === 'Half Day') && (
+              {/* Fine & Overtime — admin only */}
+              {admin && (
                 <div className="grid grid-cols-2 gap-3">
-                  <FormField label="Check In">
-                    <input
-                      type="time"
-                      value={form.check_in_time}
-                      onChange={e => setForm(f => ({ ...f, check_in_time: e.target.value }))}
-                      className={inputCls}
-                    />
+                  <FormField label="Fine (₹)">
+                    <input type="number" min="0" value={form.fine} onChange={e => setForm(f => ({ ...f, fine: e.target.value }))} placeholder="0" className={inputCls} />
                   </FormField>
-                  <FormField label="Check Out">
-                    <input
-                      type="time"
-                      value={form.check_out_time}
-                      onChange={e => setForm(f => ({ ...f, check_out_time: e.target.value }))}
-                      className={inputCls}
-                    />
+                  <FormField label="Overtime (hrs)">
+                    <input type="number" min="0" step="0.5" value={form.overtime} onChange={e => setForm(f => ({ ...f, overtime: e.target.value }))} placeholder="0" className={inputCls} />
                   </FormField>
                 </div>
               )}
 
-              {/* Fine & Overtime */}
-              <div className="grid grid-cols-2 gap-3">
-                <FormField label="Fine (₹)">
-                  <input
-                    type="number"
-                    min="0"
-                    value={form.fine}
-                    onChange={e => setForm(f => ({ ...f, fine: e.target.value }))}
-                    placeholder="0"
-                    className={inputCls}
-                  />
-                </FormField>
-                <FormField label="Overtime (hrs)">
-                  <input
-                    type="number"
-                    min="0"
-                    step="0.5"
-                    value={form.overtime}
-                    onChange={e => setForm(f => ({ ...f, overtime: e.target.value }))}
-                    placeholder="0"
-                    className={inputCls}
-                  />
-                </FormField>
-              </div>
-
-              {/* Photo */}
-              <FormField label="Attendance Photo">
-                {form.photo_data ? (
+              {/* Photo — label changes based on In/Out */}
+              <FormField label={form.mark_type === 'Check Out' ? 'Check Out Photo' : 'Check In Photo'}>
+                {form[currentPhotoField] ? (
                   <div className="relative">
-                    <img
-                      src={form.photo_data}
-                      alt="Attendance"
-                      className="w-full h-52 object-cover rounded-xl border border-[#EDE9FE]"
-                    />
-                    <button
-                      onClick={() => setForm(f => ({ ...f, photo_data: '' }))}
-                      className="absolute top-2 right-2 p-1.5 rounded-lg bg-red-500 text-white shadow-lg hover:bg-red-600 transition-all"
-                    >
+                    <img src={form[currentPhotoField]} alt="Photo" className="w-full h-52 object-cover rounded-xl border border-[#EDE9FE]" />
+                    <button onClick={() => setForm(f => ({ ...f, [currentPhotoField]: '' }))}
+                      className="absolute top-2 right-2 p-1.5 rounded-lg bg-red-500 text-white shadow-lg hover:bg-red-600 transition-all">
                       <X size={14} />
                     </button>
                   </div>
                 ) : showCamera ? (
                   <div className="space-y-2">
-                    <video
-                      ref={cameraVideoRef}
-                      className="w-full rounded-xl bg-gray-900"
-                      autoPlay
-                      playsInline
-                      muted
-                      style={{ maxHeight: 240 }}
-                    />
+                    <video ref={cameraVideoRef} className="w-full rounded-xl bg-gray-900" autoPlay playsInline muted style={{ maxHeight: 240 }} />
                     <div className="flex gap-2">
-                      <button
-                        onClick={capturePhoto}
-                        className="flex-1 py-2.5 rounded-xl bg-violet-600 text-white text-sm font-semibold flex items-center justify-center gap-2 hover:bg-violet-700 transition-all"
-                      >
+                      <button onClick={capturePhoto}
+                        className="flex-1 py-2.5 rounded-xl bg-violet-600 text-white text-sm font-semibold flex items-center justify-center gap-2 hover:bg-violet-700 transition-all">
                         <Camera size={16} /> Capture
                       </button>
-                      <button
-                        onClick={stopCamera}
-                        className="px-4 py-2.5 rounded-xl bg-gray-100 text-gray-600 text-sm font-semibold hover:bg-gray-200 transition-all"
-                      >
-                        Cancel
-                      </button>
+                      <button onClick={stopCamera} className="px-4 py-2.5 rounded-xl bg-gray-100 text-gray-600 text-sm font-semibold hover:bg-gray-200 transition-all">Cancel</button>
                     </div>
                   </div>
                 ) : (
                   <div className="flex gap-2">
-                    <button
-                      type="button"
-                      onClick={startCamera}
-                      className="flex-1 py-4 rounded-xl border-2 border-dashed border-violet-200 text-violet-500 text-sm font-semibold flex items-center justify-center gap-2 hover:border-violet-400 hover:bg-violet-50 transition-all"
-                    >
+                    <button type="button" onClick={startCamera}
+                      className="flex-1 py-4 rounded-xl border-2 border-dashed border-violet-200 text-violet-500 text-sm font-semibold flex items-center justify-center gap-2 hover:border-violet-400 hover:bg-violet-50 transition-all">
                       <Camera size={16} /> Camera
                     </button>
-                    <button
-                      type="button"
-                      onClick={() => fileInputRef.current?.click()}
-                      className="flex-1 py-4 rounded-xl border-2 border-dashed border-gray-200 text-gray-500 text-sm font-semibold flex items-center justify-center gap-2 hover:border-gray-400 hover:bg-gray-50 transition-all"
-                    >
+                    <button type="button" onClick={() => fileInputRef.current?.click()}
+                      className="flex-1 py-4 rounded-xl border-2 border-dashed border-gray-200 text-gray-500 text-sm font-semibold flex items-center justify-center gap-2 hover:border-gray-400 hover:bg-gray-50 transition-all">
                       <Upload size={16} /> Upload
                     </button>
-                    <input
-                      ref={fileInputRef}
-                      type="file"
-                      accept="image/*"
-                      capture="environment"
-                      className="hidden"
-                      onChange={handleFileSelect}
-                    />
+                    <input ref={fileInputRef} type="file" accept="image/*" capture="environment" className="hidden" onChange={handleFileSelect} />
                   </div>
                 )}
               </FormField>
 
               {/* Notes */}
               <FormField label="Notes">
-                <textarea
-                  value={form.notes}
-                  onChange={e => setForm(f => ({ ...f, notes: e.target.value }))}
-                  rows={2}
-                  placeholder="Any remarks..."
-                  className={`${inputCls} resize-none`}
-                />
+                <textarea value={form.notes} onChange={e => setForm(f => ({ ...f, notes: e.target.value }))} rows={2}
+                  placeholder="Any remarks..." className={`${inputCls} resize-none`} />
               </FormField>
             </div>
 
             <div className="px-5 py-4 border-t border-gray-100 flex gap-3 flex-shrink-0">
-              <button
-                onClick={closeForm}
-                className="flex-1 py-3 rounded-xl border border-gray-200 text-gray-600 text-sm font-semibold hover:bg-gray-50 transition-all"
-              >
-                Cancel
-              </button>
-              <button
-                onClick={handleSave}
-                disabled={saving}
+              <button onClick={closeForm} className="flex-1 py-3 rounded-xl border border-gray-200 text-gray-600 text-sm font-semibold hover:bg-gray-50 transition-all">Cancel</button>
+              <button onClick={handleSave} disabled={saving}
                 className="flex-1 py-3 rounded-xl text-white text-sm font-semibold transition-all disabled:opacity-60"
-                style={{ background: 'linear-gradient(135deg, #6D28D9, #4C1D95)' }}
-              >
-                {saving ? 'Saving...' : editId ? 'Update' : 'Mark Attendance'}
+                style={{ background: form.mark_type === 'Check Out' ? 'linear-gradient(135deg,#ef4444,#dc2626)' : 'linear-gradient(135deg,#6D28D9,#4C1D95)' }}>
+                {saving ? 'Saving...' : editId ? 'Update' : form.mark_type === 'Check Out' ? 'Mark Check Out' : 'Mark Check In'}
               </button>
             </div>
           </div>
@@ -806,17 +742,9 @@ export default function Attendance() {
 
       {/* ── Photo Modal ── */}
       {photoModal && (
-        <div
-          className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-sm"
-          onClick={() => setPhotoModal(null)}
-        >
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-sm" onClick={() => setPhotoModal(null)}>
           <div className="relative max-w-sm w-full" onClick={e => e.stopPropagation()}>
-            <button
-              onClick={() => setPhotoModal(null)}
-              className="absolute -top-10 right-0 p-2 text-white/70 hover:text-white transition-all"
-            >
-              <X size={24} />
-            </button>
+            <button onClick={() => setPhotoModal(null)} className="absolute -top-10 right-0 p-2 text-white/70 hover:text-white transition-all"><X size={24} /></button>
             <img src={photoModal} alt="Attendance Photo" className="w-full rounded-2xl shadow-2xl" />
           </div>
         </div>
@@ -827,26 +755,14 @@ export default function Attendance() {
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
           <div className="absolute inset-0 bg-black/50 backdrop-blur-sm" onClick={() => setConfirmDelete(null)} />
           <div className="relative bg-white rounded-2xl p-6 w-full max-w-xs shadow-2xl text-center space-y-4">
-            <div className="w-12 h-12 rounded-2xl bg-red-100 flex items-center justify-center mx-auto">
-              <Trash2 size={20} className="text-red-500" />
-            </div>
+            <div className="w-12 h-12 rounded-2xl bg-red-100 flex items-center justify-center mx-auto"><Trash2 size={20} className="text-red-500" /></div>
             <div>
               <h3 className="font-heading font-bold text-gray-900">Delete Record?</h3>
               <p className="text-sm text-gray-500 mt-1">This action cannot be undone.</p>
             </div>
             <div className="flex gap-3">
-              <button
-                onClick={() => setConfirmDelete(null)}
-                className="flex-1 py-2.5 rounded-xl border border-gray-200 text-gray-600 text-sm font-semibold hover:bg-gray-50 transition-all"
-              >
-                Cancel
-              </button>
-              <button
-                onClick={() => handleDelete(confirmDelete)}
-                className="flex-1 py-2.5 rounded-xl bg-red-500 text-white text-sm font-semibold hover:bg-red-600 transition-all"
-              >
-                Delete
-              </button>
+              <button onClick={() => setConfirmDelete(null)} className="flex-1 py-2.5 rounded-xl border border-gray-200 text-gray-600 text-sm font-semibold hover:bg-gray-50 transition-all">Cancel</button>
+              <button onClick={() => handleDelete(confirmDelete)} className="flex-1 py-2.5 rounded-xl bg-red-500 text-white text-sm font-semibold hover:bg-red-600 transition-all">Delete</button>
             </div>
           </div>
         </div>
