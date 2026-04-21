@@ -8,7 +8,11 @@ export function useApi(url) {
   const fetchData = useCallback(async () => {
     setLoading(true)
     try {
-      const res = await axios.get(url)
+      // 30s timeout so pages never hang forever on Supabase cold start
+      const res = await Promise.race([
+        axios.get(url),
+        new Promise((_, reject) => setTimeout(() => reject(new Error('timeout')), 30000))
+      ])
       setData(res.data)
     } catch (err) {
       console.error('useApi error:', err)

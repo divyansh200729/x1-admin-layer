@@ -76,6 +76,8 @@ const PER_PAGE = 25
 export default function Stock() {
   const [data, setData] = useState([])
   const [loading, setLoading] = useState(true)
+  const [loadError, setLoadError] = useState(false)
+  const [loadSlow, setLoadSlow] = useState(false)
   const [search, setSearch] = useState('')
   const [filterVendor, setFilterVendor] = useState('')
   const [filterType, setFilterType] = useState('')
@@ -88,14 +90,27 @@ export default function Stock() {
 
   // ── Load from backend ──────────────────────────────────────────────────
   const fetchStock = async () => {
+    setLoading(true)
+    setLoadError(false)
+    setLoadSlow(false)
+
+    // Show "waking up" message after 4 seconds
+    const slowTimer = setTimeout(() => setLoadSlow(true), 4000)
+
     try {
-      setLoading(true)
-      const res = await axios.get('/api/stock')
+      // 30-second timeout — Supabase free tier can take time to wake
+      const res = await Promise.race([
+        axios.get('/api/stock'),
+        new Promise((_, reject) => setTimeout(() => reject(new Error('timeout')), 30000))
+      ])
       setData(res.data)
+      setLoadError(false)
     } catch {
-      showToast('error', 'Failed to load stock data')
+      setLoadError(true)
     } finally {
+      clearTimeout(slowTimer)
       setLoading(false)
+      setLoadSlow(false)
     }
   }
 
@@ -278,8 +293,35 @@ export default function Stock() {
 
         {/* ── Loading ──────────────────────────────────────────────────── */}
         {loading && (
-          <div className="flex items-center justify-center py-16">
-            <div className="w-8 h-8 border-4 border-violet-200 border-t-violet-600 rounded-full animate-spin" />
+          <div className="flex flex-col items-center justify-center py-20 gap-4">
+            <div className="w-10 h-10 border-4 border-violet-200 border-t-violet-600 rounded-full animate-spin" />
+            {loadSlow ? (
+              <div className="text-center space-y-1">
+                <p className="text-white font-semibold text-sm">Waking up database...</p>
+                <p className="text-violet-300 text-xs">Supabase free tier takes ~15s on first load</p>
+              </div>
+            ) : (
+              <p className="text-violet-300 text-xs">Loading stock data...</p>
+            )}
+          </div>
+        )}
+
+        {/* ── Load Error / Retry ───────────────────────────────────────── */}
+        {!loading && loadError && (
+          <div className="flex flex-col items-center justify-center py-20 gap-4">
+            <div className="w-14 h-14 rounded-2xl bg-red-100 flex items-center justify-center">
+              <AlertCircle size={28} className="text-red-500" />
+            </div>
+            <div className="text-center space-y-1">
+              <p className="text-white font-bold text-sm">Failed to load stock</p>
+              <p className="text-violet-300 text-xs">Database may be waking up — try again</p>
+            </div>
+            <button
+              onClick={fetchStock}
+              className="flex items-center gap-2 px-5 py-2.5 rounded-xl bg-white text-violet-700 text-sm font-bold shadow hover:bg-violet-50 transition-all"
+            >
+              <RefreshCw size={15} /> Retry
+            </button>
           </div>
         )}
 
