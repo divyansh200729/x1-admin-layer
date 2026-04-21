@@ -32,6 +32,8 @@ export default defineConfig({
         ],
       },
       workbox: {
+        skipWaiting: true,
+        clientsClaim: true,
         globPatterns: ['**/*.{js,css,html,ico,png,svg,woff2}'],
         runtimeCaching: [
           {
@@ -46,6 +48,11 @@ export default defineConfig({
               cacheName: 'google-fonts-webfonts',
               expiration: { maxEntries: 10, maxAgeSeconds: 60 * 60 * 24 * 365 },
             },
+          },
+          {
+            // Always fetch Supabase data fresh — never serve from cache
+            urlPattern: /^https:\/\/.*\.supabase\.co/,
+            handler: 'NetworkOnly',
           },
           {
             urlPattern: /\/api\/.*/,
