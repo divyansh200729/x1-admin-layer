@@ -13,6 +13,13 @@ async function q(promise) {
   return data
 }
 
+// Wake up Supabase on app start to avoid cold-start delays
+export async function pingDB() {
+  try {
+    await supabase.from('employees').select('id').limit(1)
+  } catch { /* silent */ }
+}
+
 // ─── Orders ───────────────────────────────────────────────────
 export async function getOrders() {
   return q(supabase.from('orders').select('*').order('created_at', { ascending: false }))
