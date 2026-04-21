@@ -141,10 +141,14 @@ export default function Attendance() {
       })
       setEditId(record.id)
     } else {
+      const now = new Date()
+      const currentTime = now.toTimeString().slice(0, 5)
       setForm({
         ...EMPTY_FORM,
         employee_name: admin ? '' : (currentUser?.name || ''),
-        date: new Date().toISOString().slice(0, 10),
+        date: now.toISOString().slice(0, 10),
+        check_in_time: currentTime,
+        check_out_time: currentTime,
       })
       setEditId(null)
     }
