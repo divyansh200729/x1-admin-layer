@@ -35,6 +35,22 @@ export function canAccess(sectionId) {
   return (ROLE_ACCESS[user.role] || []).includes(sectionId)
 }
 
-// Admin credentials (hardcoded for client-side check)
+// Admin credentials
 export const ADMIN_EMAIL = 'admin@x1.com'
-export const ADMIN_PASSWORD = 'admin123'
+const DEFAULT_ADMIN_PASSWORD = 'admin123'
+
+// Module-level variable: initialized from localStorage on first load, updated in memory on change
+let _adminPassword = (() => {
+  try { return localStorage.getItem('x1_admin_pass') || DEFAULT_ADMIN_PASSWORD } catch { return DEFAULT_ADMIN_PASSWORD }
+})()
+
+// Called by Auth.jsx at login time — always returns the current password
+export function getAdminPassword() {
+  return _adminPassword
+}
+
+// Called by Settings when admin changes password — updates both memory and localStorage
+export function setAdminPassword(newPassword) {
+  _adminPassword = newPassword
+  try { localStorage.setItem('x1_admin_pass', newPassword) } catch { /* ignore */ }
+}

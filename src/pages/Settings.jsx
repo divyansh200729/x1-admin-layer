@@ -4,7 +4,8 @@ import {
   ChevronRight, User, Lock, Eye, EyeOff, Shield,
   LogOut, ChevronLeft, Check, Smartphone, Clock
 } from 'lucide-react'
-import { getCurrentUser } from '../utils/roleChecker'
+import { getCurrentUser, getAdminPassword, setAdminPassword } from '../utils/roleChecker'
+import { changeEmployeePassword } from '../lib/db'
 
 function getInitials(name) {
   if (!name) return 'U'
@@ -226,7 +227,7 @@ function ProfileView({ user, onBack }) {
   )
 }
 
-function PasswordView({ onBack }) {
+function PasswordView({ user, onBack }) {
   const [current, setCurrent] = useState('')
   const [newPass, setNewPass] = useState('')
   const [confirm, setConfirm] = useState('')
@@ -235,6 +236,7 @@ function PasswordView({ onBack }) {
   const [showConfirm, setShowConfirm] = useState(false)
   const [status, setStatus] = useState(null) // 'success' | 'error' | null
   const [errorMsg, setErrorMsg] = useState('')
+  const [loading, setLoading] = useState(false)
 
   const savedLogins = (() => {
     try {
@@ -243,7 +245,7 @@ function PasswordView({ onBack }) {
     } catch { return [] }
   })()
 
-  const handleChangePassword = () => {
+  const handleChangePassword = async () => {
     setStatus(null)
     setErrorMsg('')
     if (!current || !newPass || !confirm) {
@@ -255,13 +257,36 @@ function PasswordView({ onBack }) {
     if (newPass.length < 6) {
       setStatus('error'); setErrorMsg('Password must be at least 6 characters.'); return
     }
-    // For admin hardcoded account
-    const user = JSON.parse(localStorage.getItem('x1_user') || '{}')
-    if (user.role === 'Admin' && current !== 'admin123') {
-      setStatus('error'); setErrorMsg('Current password is incorrect.'); return
+
+    setLoading(true)
+    let succeeded = false
+    let failMsg = ''
+
+    try {
+      if (user?.role === 'Admin') {
+        if (current !== getAdminPassword()) {
+          failMsg = 'Current password is incorrect.'
+        } else {
+          setAdminPassword(newPass) // updates module variable + localStorage atomically
+          succeeded = true
+        }
+      } else {
+        await changeEmployeePassword(user.id, current, newPass)
+        succeeded = true
+      }
+    } catch (e) {
+      failMsg = e.message || 'Failed to update password.'
+    } finally {
+      setLoading(false)
     }
-    setStatus('success')
-    setCurrent(''); setNewPass(''); setConfirm('')
+
+    if (succeeded) {
+      setStatus('success')
+      setCurrent(''); setNewPass(''); setConfirm('')
+    } else {
+      setStatus('error')
+      setErrorMsg(failMsg)
+    }
   }
 
   return (
@@ -343,10 +368,11 @@ function PasswordView({ onBack }) {
           <div className="px-4 pb-4">
             <button
               onClick={handleChangePassword}
-              className="w-full py-3 rounded-xl text-sm font-bold text-white transition-all hover:opacity-90 active:scale-95"
+              disabled={loading}
+              className="w-full py-3 rounded-xl text-sm font-bold text-white transition-all hover:opacity-90 active:scale-95 disabled:opacity-60"
               style={{ background: 'linear-gradient(135deg, #7C3AED, #4C1D95)' }}
             >
-              Update Password
+              {loading ? 'Updating…' : 'Update Password'}
             </button>
           </div>
         </div>
@@ -432,7 +458,7 @@ export default function Settings() {
 
       {view === 'main' && <MainMenu user={user} onNavigate={setView} onLogout={handleLogout} />}
       {view === 'profile' && <ProfileView user={user} onBack={() => setView('main')} />}
-      {view === 'password' && <PasswordView onBack={() => setView('main')} />}
+      {view === 'password' && <PasswordView user={user} onBack={() => setView('main')} />}
     </div>
   )
 }
