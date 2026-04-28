@@ -4,7 +4,7 @@ import {
   ChevronRight, User, Lock, Eye, EyeOff, Shield,
   LogOut, ChevronLeft, Check, Smartphone, Clock
 } from 'lucide-react'
-import { getCurrentUser, getAdminPassword } from '../utils/roleChecker'
+import { getCurrentUser, getAdminPassword, setAdminPassword } from '../utils/roleChecker'
 import { changeEmployeePassword } from '../lib/db'
 
 function getInitials(name) {
@@ -257,22 +257,35 @@ function PasswordView({ user, onBack }) {
     if (newPass.length < 6) {
       setStatus('error'); setErrorMsg('Password must be at least 6 characters.'); return
     }
+
     setLoading(true)
+    let succeeded = false
+    let failMsg = ''
+
     try {
       if (user?.role === 'Admin') {
         if (current !== getAdminPassword()) {
-          setStatus('error'); setErrorMsg('Current password is incorrect.'); return
+          failMsg = 'Current password is incorrect.'
+        } else {
+          setAdminPassword(newPass)
+          succeeded = true
         }
-        localStorage.setItem('x1_admin_pass', newPass)
       } else {
         await changeEmployeePassword(user.id, current, newPass)
+        succeeded = true
       }
-      setStatus('success')
-      setCurrent(''); setNewPass(''); setConfirm('')
     } catch (e) {
-      setStatus('error'); setErrorMsg(e.message || 'Failed to update password.')
+      failMsg = e.message || 'Failed to update password.'
     } finally {
       setLoading(false)
+    }
+
+    if (succeeded) {
+      setStatus('success')
+      setCurrent(''); setNewPass(''); setConfirm('')
+    } else {
+      setStatus('error')
+      setErrorMsg(failMsg)
     }
   }
 
@@ -355,10 +368,11 @@ function PasswordView({ user, onBack }) {
           <div className="px-4 pb-4">
             <button
               onClick={handleChangePassword}
-              className="w-full py-3 rounded-xl text-sm font-bold text-white transition-all hover:opacity-90 active:scale-95"
+              disabled={loading}
+              className="w-full py-3 rounded-xl text-sm font-bold text-white transition-all hover:opacity-90 active:scale-95 disabled:opacity-60"
               style={{ background: 'linear-gradient(135deg, #7C3AED, #4C1D95)' }}
             >
-              Update Password
+              {loading ? 'Updating…' : 'Update Password'}
             </button>
           </div>
         </div>
@@ -444,7 +458,7 @@ export default function Settings() {
 
       {view === 'main' && <MainMenu user={user} onNavigate={setView} onLogout={handleLogout} />}
       {view === 'profile' && <ProfileView user={user} onBack={() => setView('main')} />}
-      {view === 'password' && <PasswordView onBack={() => setView('main')} />}
+      {view === 'password' && <PasswordView user={user} onBack={() => setView('main')} />}
     </div>
   )
 }
